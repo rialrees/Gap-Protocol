@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Gap Protocol</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f6f6f5;
+      color: #222;
+      padding: 20px;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      max-width: 460px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    }
+    h2 { margin: 0 0 12px 0; }
+    .section { margin-bottom: 12px; }
+    .result { font-weight: 650; margin-top: 4px; }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .roll { background: #3b82f6; color: white; width: 100%; margin-top: 10px; }
+    .edit {
+      background: transparent;
+      color: #555;
+      margin-top: 8px;
+      text-decoration: underline;
+      padding-left: 0;
+    }
+    .editor { display: none; margin-top: 12px; }
+    textarea { width: 100%; height: 90px; margin-bottom: 10px; }
+    label { display:block; font-size: 12px; color:#444; margin-bottom: 6px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .row button { background:#eee; color:#222; }
+    .note { font-size: 12px; color: #666; margin-top: 10px; }
+    .status { font-size: 12px; color:#0f766e; margin-top: 8px; min-height: 16px; }
+    .danger { color:#b91c1c; }
+    input[type="file"] { display:none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Gap Protocol</h2>
+
+    <div class="section">
+      <strong>BODY</strong>
+      <div class="result" id="bodyResult">—</div>
+    </div>
+
+    <div class="section">
+      <strong>TASK</strong>
+      <div class="result" id="taskResult">—</div>
+    </div>
+
+    <div class="section">
+      <strong>REWARD</strong>
+      <div class="result" id="rewardResult">—</div>
+    </div>
+
+    <button class="roll" id="rollBtn">ROLL</button>
+    <button class="edit" id="editBtn">Edit options</button>
+
+    <div class="editor" id="editor">
+      <label for="bodyInput">Body (one per line)</label>
+      <textarea id="bodyInput"></textarea>
+
+      <label for="taskInput">Task (one per line)</label>
+      <textarea id="taskInput"></textarea>
+
+      <label for="rewardInput">Reward (one per line)</label>
+      <textarea id="rewardInput"></textarea>
+
+      <div class="row">
+        <button id="doneBtn">Done</button>
+        <button id="exportBtn">Export</button>
+        <button id="importBtn">Import</button>
+        <button id="resetBtn" class="danger">Reset to defaults</button>
+      </div>
+
+      <div class="status" id="status"></div>
+      <input type="file" id="filePicker" accept="application/json">
+    </div>
+
+    <div class="note">No upgrades. No rerolls.</div>
+  </div>
+
+  <script>
+    // Namespaced keys so we don't collide with anything else.
+    const NS = "gap_protocol_v1";
+    const KEY = (k) => `${NS}:${k}`;
+
+    const defaults = {
+      body: [
+        "Drink water + protein bite",
+        "Change room",
+        "Outside air for 2 minutes",
+        "Stretch shoulders/neck"
+      ],
+      task: [
+        "One tiny admin action",
+        "One small house job",
+        "One trunk step",
+        "Tidy one surface",
+        "Write one sentence",
+        "Sit and do nothing"
+      ],
+      reward: [
+        "Tea or coffee and sit",
+        "10 minutes game/scroll",
+        "Read a few pages",
+        "Lie down and rest"
+      ]
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $("status");
+
+    function setStatus(msg, isError=false) {
+      statusEl.textContent = msg;
+      statusEl.className = "status" + (isError ? " danger" : "");
+      if (msg) setTimeout(() => { statusEl.textContent = ""; }, 2500);
+    }
+
+    function parseLines(text) {
+      return text
+        .split("\n")
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+    }
+
+    function safeLoad(kind) {
+      try {
+        const raw = localStorage.getItem(KEY(kind));
+        if (!raw) return defaults[kind];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) && parsed.length ? parsed : defaults[kind];
+      } catch {
+        return defaults[kind];
+      }
+    }
+
+    function safeSave(kind, arr) {
+      localStorage.setItem(KEY(kind), JSON.stringify(arr));
+    }
+
+    function loadIntoEditor() {
+      $("bodyInput").value = safeLoad("body").join("\n");
+      $("taskInput").value = safeLoad("task").join("\n");
+      $("rewardInput").value = safeLoad("reward").join("\n");
+    }
+
+    function saveFromEditor() {
+      const body = parseLines($("bodyInput").value);
+      const task = parseLines($("taskInput").value);
+      const reward = parseLines($("rewardInput").value);
+
+      safeSave("body", body.length ? body : defaults.body);
+      safeSave("task", task.length ? task : defaults.task);
+      safeSave("reward", reward.length ? reward : defaults.reward);
+
+      setStatus("Saved ✔");
+    }
+
+    function pick(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function roll() {
+      const body = safeLoad("body");
+      const task = safeLoad("task");
+      const reward = safeLoad("reward");
+
+      $("bodyResult").textContent = pick(body);
+      $("taskResult").textContent = pick(task);
+      $("rewardResult").textContent = pick(reward);
+
+      // Auto-hide editor after roll
+      $("editor").style.display = "none";
+      $("editBtn").textContent = "Edit options";
+    }
+
+    function toggleEdit() {
+      const ed = $("editor");
+      const open = ed.style.display === "block";
+      ed.style.display = open ? "none" : "block";
+      $("editBtn").textContent = open ? "Edit options" : "Hide editor";
+      if (!open) loadIntoEditor();
+    }
+
+    function exportJSON() {
+      const data = {
+        body: safeLoad("body"),
+        task: safeLoad("task"),
+        reward: safeLoad("reward")
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "gap-protocol-options.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatus("Exported ✔");
+    }
+
+    function importJSONFile(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (data.body) safeSave("body", Array.isArray(data.body) ? data.body : parseLines(String(data.body)));
+          if (data.task) safeSave("task", Array.isArray(data.task) ? data.task : parseLines(String(data.task)));
+          if (data.reward) safeSave("reward", Array.isArray(data.reward) ? data.reward : parseLines(String(data.reward)));
+          loadIntoEditor();
+          setStatus("Imported ✔");
+        } catch (e) {
+          setStatus("Import failed (invalid JSON).", true);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function resetDefaults() {
+      safeSave("body", defaults.body);
+      safeSave("task", defaults.task);
+      safeSave("reward", defaults.reward);
+      loadIntoEditor();
+      setStatus("Reset to defaults ✔");
+    }
+
+    // Wire up UI
+    $("rollBtn").addEventListener("click", roll);
+    $("editBtn").addEventListener("click", toggleEdit);
+    $("doneBtn").addEventListener("click", () => { saveFromEditor(); toggleEdit(); });
+
+    // Auto-save while typing (debounced)
+    let t;
+    ["bodyInput","taskInput","rewardInput"].forEach(id => {
+      $(id).addEventListener("input", () => {
+        clearTimeout(t);
+        t = setTimeout(saveFromEditor, 350);
+      });
+    });
+
+    $("exportBtn").addEventListener("click", exportJSON);
+    $("importBtn").addEventListener("click", () => $("filePicker").click());
+    $("filePicker").addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) importJSONFile(file);
+      e.target.value = "";
+    });
+    $("resetBtn").addEventListener("click", resetDefaults);
+
+    // First load: show a roll so it's not blank.
+    roll();
+  </script>
+</body>
+</html>
